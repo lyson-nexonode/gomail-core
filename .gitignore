@@ -1,0 +1,11 @@
+bin/
+tmp/
+*.exe
+*.test
+*.out
+*.prof
+.env
+.env.local
+vendor/
+.idea/
+.vscode/
