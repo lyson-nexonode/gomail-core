@@ -1,0 +1,111 @@
+services:
+
+  # Storage: MySQL 8 for message metadata, mailboxes and users
+  mysql:
+    image: mysql:8.0
+    container_name: gomail-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: gomail
+      MYSQL_USER: gomail
+      MYSQL_PASSWORD: gomailpassword
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./migrations:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Storage: Redis 7 for sessions, hot message bodies and rate limiting
+  redis:
+    image: redis:7-alpine
+    container_name: gomail-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # SMTP server: handles inbound and outbound mail (RFC 5321)
+  # Ports remapped to unprivileged range for local development
+  smtp:
+    build:
+      context: .
+      dockerfile: docker/smtp.Dockerfile
+    container_name: gomail-smtp
+    restart: unless-stopped
+    ports:
+      - "2525:2525"  # port 25 remapped, requires root in production
+      - "5870:5870"  # port 587 remapped
+      - "6061:6061"  # pprof profiling endpoint, never expose publicly
+    environment:
+      - GOMAIL_ENV=development
+      - GOMAIL_MYSQL_DSN=gomail:gomailpassword@tcp(mysql:3306)/gomail?parseTime=true
+      - GOMAIL_REDIS_ADDR=redis:6379
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - .:/app
+
+  # IMAP server: mailbox access for mail clients (RFC 3501)
+  imap:
+    build:
+      context: .
+      dockerfile: docker/imap.Dockerfile
+    container_name: gomail-imap
+    restart: unless-stopped
+    ports:
+      - "1430:1430"  # port 143 remapped
+      - "9930:9930"  # port 993 remapped (IMAPS)
+      - "6062:6062"  # pprof profiling endpoint
+    environment:
+      - GOMAIL_ENV=development
+      - GOMAIL_MYSQL_DSN=gomail:gomailpassword@tcp(mysql:3306)/gomail?parseTime=true
+      - GOMAIL_REDIS_ADDR=redis:6379
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - .:/app
+
+  # JMAP server: modern mail API (RFC 8620 / RFC 8621)
+  jmap:
+    build:
+      context: .
+      dockerfile: docker/jmap.Dockerfile
+    container_name: gomail-jmap
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+      - "6063:6063"  # pprof profiling endpoint
+    environment:
+      - GOMAIL_ENV=development
+      - GOMAIL_MYSQL_DSN=gomail:gomailpassword@tcp(mysql:3306)/gomail?parseTime=true
+      - GOMAIL_REDIS_ADDR=redis:6379
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - .:/app
+
+volumes:
+  mysql_data:
+  redis_data:
