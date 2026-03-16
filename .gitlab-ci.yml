@@ -30,20 +30,20 @@ lint:
 
 test:
   stage: test
-  image: golang:1.26-alpine
+  image: golang:1.26
   cache:
     key: "$CI_COMMIT_REF_SLUG"
     paths:
       - .go/pkg/mod/
   before_script:
-    - export PATH="$GOPATH/bin:$PATH"
-    - apk add --no-cache git
     - go mod download
   script:
+    # Use golang non-alpine image which has CGO enabled for -race flag
     - go test ./... -v -race -coverprofile=coverage.out -covermode=atomic
     - go tool cover -func=coverage.out | tail -1
   coverage: '/total:\s+\(statements\)\s+(\d+\.\d+)%/'
   artifacts:
+    when: always
     reports:
       coverage_report:
         coverage_format: cobertura
