@@ -2,7 +2,7 @@
 
 > A sovereign mail server written in Go — SMTP · IMAP · JMAP
 
-[![CI](https://github.com/lyson-nexonode/gomail-core/actions/workflows/ci.yml/badge.svg)](https://gitlab.com/lyson-nexonode/gomail-core)
+[![GitHub CI](https://github.com/lyson-nexonode/gomail-core/actions/workflows/ci.yml/badge.svg)](https://github.com/lyson-nexonode/gomail-core/actions) [![GitLab CI](https://gitlab.com/lyson-nexonode/gomail-core/badges/main/pipeline.svg)](https://gitlab.com/lyson-nexonode/gomail-core/-/pipelines)
 [![Go Version](https://img.shields.io/badge/go-1.26+-blue.svg)](https://golang.org)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Go Report Card](https://goreportcard.com/badge/github.com/lyson-nexonode/gomail-core)](https://goreportcard.com/report/github.com/lyson-nexonode/gomail-core)
