@@ -11,35 +11,36 @@ variables:
   GO_VERSION: "1.22"
   DOCKER_DRIVER: overlay2
   DOCKER_TLS_CERTDIR: "/certs"
+  GOPATH: "$CI_PROJECT_DIR/.go"
 
-# Cache Go modules between jobs to speed up pipeline
-.go_cache: &go_cache
+# Lint job
+lint:
+  stage: lint
+  image: golangci/golangci-lint:v1.57.2
   cache:
     key: "$CI_COMMIT_REF_SLUG"
     paths:
       - .go/pkg/mod/
   before_script:
-    - export GOPATH="$CI_PROJECT_DIR/.go"
     - export PATH="$GOPATH/bin:$PATH"
-
-# Lint job — runs golangci-lint on all packages
-lint:
-  stage: lint
-  image: golangci/golangci-lint:v1.57.2
-  <<: *go_cache
   script:
     - golangci-lint run ./... --timeout 5m
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
     - if: '$CI_COMMIT_BRANCH == "main"'
 
-# Test job — runs all unit tests with race detector
+# Test job
 test:
   stage: test
-  image: golang:$GO_VERSION-alpine
-  <<: *go_cache
-  script:
+  image: golang:1.22-alpine
+  cache:
+    key: "$CI_COMMIT_REF_SLUG"
+    paths:
+      - .go/pkg/mod/
+  before_script:
+    - export PATH="$GOPATH/bin:$PATH"
     - apk add --no-cache git
+  script:
     - go test ./... -v -race -coverprofile=coverage.out -covermode=atomic
     - go tool cover -func=coverage.out | tail -1
   coverage: '/total:\s+\(statements\)\s+(\d+\.\d+)%/'
@@ -55,17 +56,22 @@ test:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
     - if: '$CI_COMMIT_BRANCH == "main"'
 
-# Build job — verifies all binaries compile correctly
+# Build job
 build:
   stage: build
-  image: golang:$GO_VERSION-alpine
-  <<: *go_cache
-  script:
+  image: golang:1.22-alpine
+  cache:
+    key: "$CI_COMMIT_REF_SLUG"
+    paths:
+      - .go/pkg/mod/
+  before_script:
+    - export PATH="$GOPATH/bin:$PATH"
     - apk add --no-cache git
+  script:
     - go build -ldflags="-w -s" -o bin/smtp ./cmd/smtp
     - go build -ldflags="-w -s" -o bin/imap ./cmd/imap
     - go build -ldflags="-w -s" -o bin/jmap ./cmd/jmap
-    - echo "Build successful — smtp, imap, jmap binaries produced"
+    - echo "Build successful"
   artifacts:
     paths:
       - bin/
@@ -74,7 +80,7 @@ build:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
     - if: '$CI_COMMIT_BRANCH == "main"'
 
-# Docker build job — builds and pushes images to GitLab registry
+# Docker jobs
 docker:smtp:
   stage: docker
   image: docker:24
