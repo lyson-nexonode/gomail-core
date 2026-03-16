@@ -2,8 +2,8 @@
 
 > A sovereign mail server written in Go — SMTP · IMAP · JMAP
 
-[![CI](https://gitlab.com/lyson-nexonode/gomail-core/badges/main/pipeline.svg)](https://gitlab.com/lyson-nexonode/gomail-core)
-[![Go Version](https://img.shields.io/badge/go-1.22+-blue.svg)](https://golang.org)
+[![CI](https://github.com/lyson-nexonode/gomail-core/actions/workflows/ci.yml/badge.svg)](https://gitlab.com/lyson-nexonode/gomail-core)
+[![Go Version](https://img.shields.io/badge/go-1.26+-blue.svg)](https://golang.org)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Go Report Card](https://goreportcard.com/badge/github.com/lyson-nexonode/gomail-core)](https://goreportcard.com/report/github.com/lyson-nexonode/gomail-core)
 
@@ -71,7 +71,7 @@ NOT_AUTHENTICATED --> AUTHENTICATED --> SELECTED --> AUTHENTICATED
 
 | Component | Technology | Details |
 |-----------|------------|---------|
-| Language  | Go 1.22+   | Goroutines, channels, crypto/tls |
+| Language  | Go 1.26+   | Goroutines, channels, crypto/tls |
 | SMTP      | Custom     | RFC 5321, FSM sessions, dot-unstuffing |
 | IMAP      | Custom     | RFC 3501, FSM sessions, bcrypt auth |
 | JMAP      | Custom     | RFC 8620/8621, JWT, HTTP/2 |
@@ -88,7 +88,7 @@ NOT_AUTHENTICATED --> AUTHENTICATED --> SELECTED --> AUTHENTICATED
 
 ## Quick start
 
-**Requirements**: Go 1.22+, Docker, Docker Compose
+**Requirements**: Go 1.26+, Docker, Docker Compose
 
 ```bash
 git clone https://github.com/lyson-nexonode/gomail-core.git
