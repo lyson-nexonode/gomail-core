@@ -1,0 +1,121 @@
+# gomail-core CI pipeline
+# Stages: lint -> test -> build -> docker
+
+stages:
+  - lint
+  - test
+  - build
+  - docker
+
+variables:
+  GO_VERSION: "1.22"
+  DOCKER_DRIVER: overlay2
+  DOCKER_TLS_CERTDIR: "/certs"
+
+# Cache Go modules between jobs to speed up pipeline
+.go_cache: &go_cache
+  cache:
+    key: "$CI_COMMIT_REF_SLUG"
+    paths:
+      - .go/pkg/mod/
+  before_script:
+    - export GOPATH="$CI_PROJECT_DIR/.go"
+    - export PATH="$GOPATH/bin:$PATH"
+
+# Lint job — runs golangci-lint on all packages
+lint:
+  stage: lint
+  image: golangci/golangci-lint:v1.57.2
+  <<: *go_cache
+  script:
+    - golangci-lint run ./... --timeout 5m
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == "main"'
+
+# Test job — runs all unit tests with race detector
+test:
+  stage: test
+  image: golang:$GO_VERSION-alpine
+  <<: *go_cache
+  script:
+    - apk add --no-cache git
+    - go test ./... -v -race -coverprofile=coverage.out -covermode=atomic
+    - go tool cover -func=coverage.out | tail -1
+  coverage: '/total:\s+\(statements\)\s+(\d+\.\d+)%/'
+  artifacts:
+    reports:
+      coverage_report:
+        coverage_format: cobertura
+        path: coverage.out
+    paths:
+      - coverage.out
+    expire_in: 1 week
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == "main"'
+
+# Build job — verifies all binaries compile correctly
+build:
+  stage: build
+  image: golang:$GO_VERSION-alpine
+  <<: *go_cache
+  script:
+    - apk add --no-cache git
+    - go build -ldflags="-w -s" -o bin/smtp ./cmd/smtp
+    - go build -ldflags="-w -s" -o bin/imap ./cmd/imap
+    - go build -ldflags="-w -s" -o bin/jmap ./cmd/jmap
+    - echo "Build successful — smtp, imap, jmap binaries produced"
+  artifacts:
+    paths:
+      - bin/
+    expire_in: 1 day
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == "main"'
+
+# Docker build job — builds and pushes images to GitLab registry
+docker:smtp:
+  stage: docker
+  image: docker:24
+  services:
+    - docker:24-dind
+  before_script:
+    - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
+  script:
+    - docker build -f docker/smtp.Dockerfile -t "$CI_REGISTRY_IMAGE/smtp:$CI_COMMIT_SHORT_SHA" .
+    - docker tag "$CI_REGISTRY_IMAGE/smtp:$CI_COMMIT_SHORT_SHA" "$CI_REGISTRY_IMAGE/smtp:latest"
+    - docker push "$CI_REGISTRY_IMAGE/smtp:$CI_COMMIT_SHORT_SHA"
+    - docker push "$CI_REGISTRY_IMAGE/smtp:latest"
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+
+docker:imap:
+  stage: docker
+  image: docker:24
+  services:
+    - docker:24-dind
+  before_script:
+    - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
+  script:
+    - docker build -f docker/imap.Dockerfile -t "$CI_REGISTRY_IMAGE/imap:$CI_COMMIT_SHORT_SHA" .
+    - docker tag "$CI_REGISTRY_IMAGE/imap:$CI_COMMIT_SHORT_SHA" "$CI_REGISTRY_IMAGE/imap:latest"
+    - docker push "$CI_REGISTRY_IMAGE/imap:$CI_COMMIT_SHORT_SHA"
+    - docker push "$CI_REGISTRY_IMAGE/imap:latest"
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+
+docker:jmap:
+  stage: docker
+  image: docker:24
+  services:
+    - docker:24-dind
+  before_script:
+    - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
+  script:
+    - docker build -f docker/jmap.Dockerfile -t "$CI_REGISTRY_IMAGE/jmap:$CI_COMMIT_SHORT_SHA" .
+    - docker tag "$CI_REGISTRY_IMAGE/jmap:$CI_COMMIT_SHORT_SHA" "$CI_REGISTRY_IMAGE/jmap:latest"
+    - docker push "$CI_REGISTRY_IMAGE/jmap:$CI_COMMIT_SHORT_SHA"
+    - docker push "$CI_REGISTRY_IMAGE/jmap:latest"
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
