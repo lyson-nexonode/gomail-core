@@ -1,6 +1,3 @@
-# gomail-core CI pipeline
-# Stages: lint -> test -> build -> docker
-
 stages:
   - lint
   - test
@@ -13,26 +10,27 @@ variables:
   DOCKER_TLS_CERTDIR: "/certs"
   GOPATH: "$CI_PROJECT_DIR/.go"
 
-# Lint job
 lint:
   stage: lint
-  image: golangci/golangci-lint:v1.57.2
+  image: golang:1.26-alpine
   cache:
     key: "$CI_COMMIT_REF_SLUG"
     paths:
       - .go/pkg/mod/
   before_script:
     - export PATH="$GOPATH/bin:$PATH"
+    - apk add --no-cache git curl
+    - go mod download
+    - curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b /usr/local/bin latest
   script:
     - golangci-lint run ./... --timeout 5m
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
     - if: '$CI_COMMIT_BRANCH == "main"'
 
-# Test job
 test:
   stage: test
-  image: golang:1.22-alpine
+  image: golang:1.26-alpine
   cache:
     key: "$CI_COMMIT_REF_SLUG"
     paths:
@@ -40,6 +38,7 @@ test:
   before_script:
     - export PATH="$GOPATH/bin:$PATH"
     - apk add --no-cache git
+    - go mod download
   script:
     - go test ./... -v -race -coverprofile=coverage.out -covermode=atomic
     - go tool cover -func=coverage.out | tail -1
@@ -56,10 +55,9 @@ test:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
     - if: '$CI_COMMIT_BRANCH == "main"'
 
-# Build job
 build:
   stage: build
-  image: golang:1.22-alpine
+  image: golang:1.26-alpine
   cache:
     key: "$CI_COMMIT_REF_SLUG"
     paths:
@@ -67,6 +65,7 @@ build:
   before_script:
     - export PATH="$GOPATH/bin:$PATH"
     - apk add --no-cache git
+    - go mod download
   script:
     - go build -ldflags="-w -s" -o bin/smtp ./cmd/smtp
     - go build -ldflags="-w -s" -o bin/imap ./cmd/imap
@@ -80,7 +79,6 @@ build:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
     - if: '$CI_COMMIT_BRANCH == "main"'
 
-# Docker jobs
 docker:smtp:
   stage: docker
   image: docker:24
