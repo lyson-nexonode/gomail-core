@@ -2,16 +2,17 @@ package smtp
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"strings"
 	"time"
 
 	"go.uber.org/zap"
+
+	"github.com/lyson-nexonode/gomail-core/internal/ports"
 )
 
-// handleEHLO processes the EHLO and HELO commands (RFC 5321 section 4.1.1.1).
-// EHLO is the modern form and advertises server capabilities.
-// On success, the FSM transitions to StateGreeted.
+// handleEHLO processes EHLO and HELO commands (RFC 5321 section 4.1.1.1).
 func (s *Session) handleEHLO(args string) {
 	if args == "" {
 		s.write("501 Syntax: EHLO hostname")
@@ -22,10 +23,8 @@ func (s *Session) handleEHLO(args string) {
 		return
 	}
 
-	// Reset any in-progress transaction when client re-identifies
 	s.envelope.Reset()
 
-	// Advertise server capabilities to the client
 	s.write(fmt.Sprintf("250-%s greets %s", s.cfg.SMTP.Domain, args))
 	s.write(fmt.Sprintf("250-SIZE %d", s.cfg.SMTP.MaxSize))
 	s.write("250-8BITMIME")
@@ -33,10 +32,7 @@ func (s *Session) handleEHLO(args string) {
 }
 
 // handleMAIL processes the MAIL FROM command (RFC 5321 section 4.1.1.2).
-// Extracts the sender address and records it in the envelope.
-// On success, the FSM transitions to StateMailFrom.
 func (s *Session) handleMAIL(args string) {
-	// args is expected to be: "FROM:<alice@example.com>"
 	addr, ok := extractAddress(args, "FROM:")
 	if !ok {
 		s.write("501 Syntax: MAIL FROM:<address>")
@@ -56,8 +52,6 @@ func (s *Session) handleMAIL(args string) {
 }
 
 // handleRCPT processes the RCPT TO command (RFC 5321 section 4.1.1.3).
-// Validates that the recipient domain is handled by this server.
-// On success, the FSM transitions to StateRcptTo (or stays there for multiple recipients).
 func (s *Session) handleRCPT(args string) {
 	addr, ok := extractAddress(args, "TO:")
 	if !ok {
@@ -65,7 +59,6 @@ func (s *Session) handleRCPT(args string) {
 		return
 	}
 
-	// Basic recipient limit to prevent abuse
 	if len(s.envelope.To) >= 100 {
 		s.write("452 Too many recipients")
 		return
@@ -84,9 +77,8 @@ func (s *Session) handleRCPT(args string) {
 }
 
 // handleDATA processes the DATA command (RFC 5321 section 4.1.1.4).
-// Reads the message body until the end-of-data sequence (CRLF.CRLF).
-// Implements dot-stuffing: a line starting with "." is either the end marker
-// or a literal dot (the leading dot is stripped per RFC 5321 section 4.5.2).
+// Once the message body is fully received, it publishes a MessageReceived event
+// to the delivery pipeline — the SMTP session knows nothing about storage.
 func (s *Session) handleDATA() {
 	if !s.transition(EventData) {
 		return
@@ -109,7 +101,7 @@ func (s *Session) handleDATA() {
 			return
 		}
 
-		// End-of-data marker: a line containing only a dot (RFC 5321 section 4.5.2)
+		// End-of-data marker (RFC 5321 section 4.5.2)
 		if line == ".\r\n" || line == ".\n" {
 			break
 		}
@@ -121,7 +113,6 @@ func (s *Session) handleDATA() {
 
 		body.WriteString(line)
 
-		// Enforce maximum message size
 		if int64(body.Len()) > s.cfg.SMTP.MaxSize {
 			s.write("552 Message size exceeds maximum permitted")
 			s.envelope.Reset()
@@ -134,21 +125,31 @@ func (s *Session) handleDATA() {
 	s.envelope.Size = int64(len(s.envelope.Data))
 	s.envelope.ReceivedAt = time.Now()
 
-	// TODO: persist the message to storage (MySQL + Redis) — Day 3
-	s.log.Info("smtp message received",
-		zap.String("session", s.id),
-		zap.String("from", s.envelope.From),
-		zap.Strings("to", s.envelope.To),
-		zap.Int64("size", s.envelope.Size),
-	)
+	// Publish a MessageReceived event to the delivery pipeline.
+	// The SMTP session is decoupled from storage — it only knows the port.
+	event := ports.MessageReceived{
+		From:      s.envelope.From,
+		To:        s.envelope.To,
+		Body:      s.envelope.Data,
+		Size:      s.envelope.Size,
+		Timestamp: s.envelope.ReceivedAt,
+	}
 
-	// Transition back to greeted so the client can send another message
+	ctx := context.Background()
+	if err := s.delivery.Deliver(ctx, event); err != nil {
+		s.log.Error("delivery pipeline failed",
+			zap.String("session", s.id),
+			zap.Error(err),
+		)
+		s.write("451 Requested action aborted: error in processing")
+		return
+	}
+
 	s.transition(EventDone)
 	s.write("250 OK: message accepted for delivery")
 }
 
 // handleRSET processes the RSET command (RFC 5321 section 4.1.1.5).
-// Resets the current mail transaction without closing the session.
 func (s *Session) handleRSET() {
 	if !s.transition(EventRset) {
 		return
@@ -158,16 +159,13 @@ func (s *Session) handleRSET() {
 }
 
 // handleQUIT processes the QUIT command (RFC 5321 section 4.1.1.10).
-// Sends the goodbye response and lets Handle() close the connection.
 func (s *Session) handleQUIT() {
 	s.transition(EventQuit)
 	s.write(fmt.Sprintf("221 %s Service closing transmission channel", s.cfg.SMTP.Domain))
 	s.log.Info("smtp session quit", zap.String("session", s.id))
 }
 
-// extractAddress parses an address from a MAIL FROM or RCPT TO argument.
-// Input examples: "FROM:<alice@example.com>" or "TO:<bob@example.com>"
-// Returns the address without angle brackets and true on success.
+// extractAddress parses an address from MAIL FROM or RCPT TO arguments.
 func extractAddress(args, prefix string) (string, bool) {
 	upper := strings.ToUpper(args)
 	if !strings.HasPrefix(upper, prefix) {
@@ -177,12 +175,10 @@ func extractAddress(args, prefix string) (string, bool) {
 	rest := args[len(prefix):]
 	rest = strings.TrimSpace(rest)
 
-	// Strip angle brackets
 	if strings.HasPrefix(rest, "<") && strings.HasSuffix(rest, ">") {
 		return rest[1 : len(rest)-1], true
 	}
 
-	// Accept addresses without angle brackets (some clients omit them)
 	if rest != "" {
 		return rest, true
 	}

@@ -7,26 +7,29 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/lyson-nexonode/gomail-core/config"
+	"github.com/lyson-nexonode/gomail-core/internal/ports"
 )
 
 // Server listens for incoming SMTP connections and spawns one Session per client.
-// Each session runs in its own goroutine, enabling high concurrency.
+// It depends only on the ports.DeliveryPipeline interface — never on concrete storage.
 type Server struct {
 	cfg      *config.Config
 	log      *zap.Logger
 	listener net.Listener
+	delivery ports.DeliveryPipeline
 }
 
-// NewServer creates a new SMTP server with the given configuration.
-func NewServer(cfg *config.Config, log *zap.Logger) *Server {
+// NewServer creates a new SMTP server.
+// delivery is the port through which received messages are handed off for persistence.
+func NewServer(cfg *config.Config, log *zap.Logger, delivery ports.DeliveryPipeline) *Server {
 	return &Server{
-		cfg: cfg,
-		log: log,
+		cfg:      cfg,
+		log:      log,
+		delivery: delivery,
 	}
 }
 
 // Start begins listening for TCP connections on the configured address.
-// It blocks until the context is cancelled or a fatal error occurs.
 func (s *Server) Start(ctx context.Context) error {
 	var err error
 	s.listener, err = net.Listen("tcp", s.cfg.SMTP.Addr)
@@ -40,7 +43,6 @@ func (s *Server) Start(ctx context.Context) error {
 		zap.String("domain", s.cfg.SMTP.Domain),
 	)
 
-	// Watch for context cancellation to shut down gracefully
 	go func() {
 		<-ctx.Done()
 		s.log.Info("smtp server shutting down")
@@ -52,7 +54,6 @@ func (s *Server) Start(ctx context.Context) error {
 		if err != nil {
 			select {
 			case <-ctx.Done():
-				// Expected shutdown, not an error
 				return nil
 			default:
 				s.log.Error("smtp accept error", zap.Error(err))
@@ -64,8 +65,6 @@ func (s *Server) Start(ctx context.Context) error {
 			zap.String("remote", conn.RemoteAddr().String()),
 		)
 
-		// Each client runs in its own goroutine
-		// This is the Go concurrency model: one goroutine per connection
-		go NewSession(conn, s.cfg, s.log).Handle()
+		go NewSession(conn, s.cfg, s.log, s.delivery).Handle()
 	}
 }
