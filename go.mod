@@ -1,6 +1,6 @@
 module github.com/lyson-nexonode/gomail-core
 
-go 1.24.2
+go 1.25.0
 
 require (
 	github.com/go-sql-driver/mysql v1.8.1
@@ -8,6 +8,7 @@ require (
 	github.com/looplab/fsm v1.0.3
 	github.com/redis/go-redis/v9 v9.18.0
 	go.uber.org/zap v1.27.1
+	golang.org/x/crypto v0.49.0
 )
 
 require (
