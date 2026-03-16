@@ -132,9 +132,9 @@ func extractSubject(body []byte) string {
 }
 
 // compile-time checks that MessageStore implements all required ports
-var _ ports.MailboxReader    = (*MessageStore)(nil)
-var _ ports.MessageReader    = (*MessageStore)(nil)
-var _ ports.DomainResolver   = (*MessageStore)(nil)
+var _ ports.MailboxReader = (*MessageStore)(nil)
+var _ ports.MessageReader = (*MessageStore)(nil)
+var _ ports.DomainResolver = (*MessageStore)(nil)
 var _ ports.UserAuthenticator = (*MessageStore)(nil)
 
 // FindDomain implements ports.DomainResolver.

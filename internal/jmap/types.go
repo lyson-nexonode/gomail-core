@@ -38,12 +38,12 @@ type MethodResponse struct {
 // SessionResponse is returned by the JMAP session endpoint (RFC 8620 section 2).
 // It describes the server capabilities and the user's accounts.
 type SessionResponse struct {
-	Capabilities map[string]interface{} `json:"capabilities"`
-	Accounts     map[string]Account     `json:"accounts"`
-	PrimaryAccounts map[string]string   `json:"primaryAccounts"`
-	Username     string                 `json:"username"`
-	APIURL       string                 `json:"apiUrl"`
-	State        string                 `json:"state"`
+	Capabilities    map[string]interface{} `json:"capabilities"`
+	Accounts        map[string]Account     `json:"accounts"`
+	PrimaryAccounts map[string]string      `json:"primaryAccounts"`
+	Username        string                 `json:"username"`
+	APIURL          string                 `json:"apiUrl"`
+	State           string                 `json:"state"`
 }
 
 // Account represents a JMAP account (RFC 8620 section 1.6.2).
@@ -70,14 +70,14 @@ type JMAPMailbox struct {
 
 // JMAPEmail represents an email in JMAP (RFC 8621 section 4).
 type JMAPEmail struct {
-	ID           string   `json:"id"`
-	MailboxIDs   map[string]bool `json:"mailboxIds"`
-	Subject      string   `json:"subject"`
-	From         []Address `json:"from,omitempty"`
-	To           []Address `json:"to,omitempty"`
-	ReceivedAt   string   `json:"receivedAt"`
-	Size         int64    `json:"size"`
-	BodyValues   map[string]BodyValue `json:"bodyValues,omitempty"`
+	ID         string               `json:"id"`
+	MailboxIDs map[string]bool      `json:"mailboxIds"`
+	Subject    string               `json:"subject"`
+	From       []Address            `json:"from,omitempty"`
+	To         []Address            `json:"to,omitempty"`
+	ReceivedAt string               `json:"receivedAt"`
+	Size       int64                `json:"size"`
+	BodyValues map[string]BodyValue `json:"bodyValues,omitempty"`
 }
 
 // Address represents an email address in JMAP format.

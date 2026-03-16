@@ -78,8 +78,8 @@ func TestExtractSubject(t *testing.T) {
 		expected string
 	}{
 		{
-			name: "standard subject header",
-			body: "From: alice@gomail.local\r\nTo: bob@gomail.local\r\nSubject: Hello World\r\n\r\nBody here",
+			name:     "standard subject header",
+			body:     "From: alice@gomail.local\r\nTo: bob@gomail.local\r\nSubject: Hello World\r\n\r\nBody here",
 			expected: "Hello World",
 		},
 		{

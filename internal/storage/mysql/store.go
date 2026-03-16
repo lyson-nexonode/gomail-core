@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/jmoiron/sqlx"
 	_ "github.com/go-sql-driver/mysql" // MySQL driver registration
+	"github.com/jmoiron/sqlx"
 
 	"go.uber.org/zap"
 )

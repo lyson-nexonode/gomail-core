@@ -141,10 +141,10 @@ func (s *Server) handleEmailQuery(ctx context.Context, claims *Claims, call Meth
 	return MethodResponse{
 		Name: "Email/query",
 		Result: map[string]interface{}{
-			"accountId":    fmt.Sprintf("u%d", claims.UserID),
-			"ids":          ids,
-			"total":        len(ids),
-			"position":     0,
+			"accountId":           fmt.Sprintf("u%d", claims.UserID),
+			"ids":                 ids,
+			"total":               len(ids),
+			"position":            0,
 			"canCalculateChanges": false,
 		},
 	}

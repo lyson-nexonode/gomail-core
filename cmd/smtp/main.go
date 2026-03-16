@@ -23,7 +23,7 @@ func main() {
 	if err != nil {
 		panic("failed to initialize logger: " + err.Error())
 	}
-	defer log.Sync()
+	defer func() { _ = log.Sync() }()
 
 	log.Info("gomail-core smtp starting",
 		zap.String("env", cfg.Env),
@@ -36,14 +36,14 @@ func main() {
 	if err != nil {
 		log.Fatal("mysql init failed", zap.Error(err))
 	}
-	defer mysql.Close()
+	defer func() { _ = mysql.Close() }()
 
 	// Initialize Redis store
 	rdb, err := redisstore.New(cfg.Redis.Addr, cfg.Redis.Password, cfg.Redis.DB, log)
 	if err != nil {
 		log.Fatal("redis init failed", zap.Error(err))
 	}
-	defer rdb.Close()
+	defer func() { _ = rdb.Close() }()
 
 	// Wire the message store
 	ms := storage.NewMessageStore(mysql, rdb, log)

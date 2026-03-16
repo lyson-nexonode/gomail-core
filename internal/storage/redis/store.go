@@ -16,7 +16,6 @@ const (
 	bodyTTL = 24 * time.Hour
 
 	// sessionTTL is the lifetime of an IMAP session cache entry.
-	sessionTTL = 30 * time.Minute
 )
 
 // Store wraps a Redis client and provides mail-specific cache operations.

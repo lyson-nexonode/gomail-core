@@ -8,7 +8,7 @@ stages:
   - docker
 
 variables:
-  GO_VERSION: "1.22"
+  GO_VERSION: "1.26"
   DOCKER_DRIVER: overlay2
   DOCKER_TLS_CERTDIR: "/certs"
   GOPATH: "$CI_PROJECT_DIR/.go"

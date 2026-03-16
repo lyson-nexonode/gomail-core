@@ -36,7 +36,7 @@ func (s *Server) Start(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	defer s.listener.Close()
+	defer func() { _ = s.listener.Close() }()
 
 	s.log.Info("smtp server listening",
 		zap.String("addr", s.cfg.SMTP.Addr),
@@ -46,7 +46,7 @@ func (s *Server) Start(ctx context.Context) error {
 	go func() {
 		<-ctx.Done()
 		s.log.Info("smtp server shutting down")
-		s.listener.Close()
+		_ = s.listener.Close()
 	}()
 
 	for {

@@ -17,12 +17,12 @@ var Capability = []string{
 type FetchItem string
 
 const (
-	FetchFlags       FetchItem = "FLAGS"
-	FetchEnvelope    FetchItem = "ENVELOPE"
-	FetchBodySection FetchItem = "BODY[]"
-	FetchRFC822Size  FetchItem = "RFC822.SIZE"
+	FetchFlags        FetchItem = "FLAGS"
+	FetchEnvelope     FetchItem = "ENVELOPE"
+	FetchBodySection  FetchItem = "BODY[]"
+	FetchRFC822Size   FetchItem = "RFC822.SIZE"
 	FetchInternalDate FetchItem = "INTERNALDATE"
-	FetchUID         FetchItem = "UID"
+	FetchUID          FetchItem = "UID"
 )
 
 // Flag represents an IMAP message flag as defined in RFC 3501 section 2.3.2.
@@ -44,6 +44,6 @@ type SelectedMailbox struct {
 	Name        string
 	UIDValidity uint32
 	UIDNext     uint32
-	ReadOnly    bool      // true when opened via EXAMINE instead of SELECT
+	ReadOnly    bool // true when opened via EXAMINE instead of SELECT
 	SelectedAt  time.Time
 }

@@ -54,7 +54,7 @@ func (s *Store) AllocateUID(ctx context.Context, mailboxID uint64) (uint32, erro
 	if err != nil {
 		return 0, fmt.Errorf("allocate uid begin tx: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 
 	var current uint32
 	err = tx.QueryRowContext(ctx,

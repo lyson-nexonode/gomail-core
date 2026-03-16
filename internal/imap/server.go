@@ -48,14 +48,14 @@ func (s *Server) Start(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	defer s.listener.Close()
+	defer func() { _ = s.listener.Close() }()
 
 	s.log.Info("imap server listening", zap.String("addr", s.cfg.IMAP.Addr))
 
 	go func() {
 		<-ctx.Done()
 		s.log.Info("imap server shutting down")
-		s.listener.Close()
+		_ = s.listener.Close()
 	}()
 
 	for {

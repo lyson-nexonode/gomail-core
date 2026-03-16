@@ -90,7 +90,7 @@ func (s *Session) handleDATA() {
 	reader := bufio.NewReader(s.conn)
 
 	for {
-		s.conn.SetReadDeadline(time.Now().Add(10 * time.Minute))
+		_ = s.conn.SetReadDeadline(time.Now().Add(10 * time.Minute))
 
 		line, err := reader.ReadString('\n')
 		if err != nil {

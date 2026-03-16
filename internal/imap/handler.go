@@ -198,18 +198,18 @@ func (s *Session) handleFetch(tag, args string) {
 		seqNum := i + 1
 
 		var response strings.Builder
-		response.WriteString(fmt.Sprintf("* %d FETCH (", seqNum))
+		fmt.Fprintf(&response, "* %d FETCH (", seqNum)
 
 		if strings.Contains(items, "FLAGS") {
-			response.WriteString(fmt.Sprintf("FLAGS (%s) ", msg.Flags))
+			fmt.Fprintf(&response, "FLAGS (%s) ", msg.Flags)
 		}
 
 		if strings.Contains(items, "UID") {
-			response.WriteString(fmt.Sprintf("UID %d ", msg.UID))
+			fmt.Fprintf(&response, "UID %d ", msg.UID)
 		}
 
 		if strings.Contains(items, "RFC822.SIZE") {
-			response.WriteString(fmt.Sprintf("RFC822.SIZE %d ", msg.SizeBytes))
+			fmt.Fprintf(&response, "RFC822.SIZE %d ", msg.SizeBytes)
 		}
 
 		if strings.Contains(items, "BODY[]") || strings.Contains(items, "RFC822") {
@@ -218,7 +218,7 @@ func (s *Session) handleFetch(tag, args string) {
 			if err != nil || body == nil {
 				body = []byte("(message body unavailable)")
 			}
-			response.WriteString(fmt.Sprintf("BODY[] {%d}\r\n%s ", len(body), string(body)))
+			fmt.Fprintf(&response, "BODY[] {%d}\r\n%s ", len(body), string(body))
 		}
 
 		result := strings.TrimRight(response.String(), " ") + ")"

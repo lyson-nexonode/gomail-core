@@ -15,7 +15,7 @@ type Message struct {
 	UID          uint32    `db:"uid"`
 	Flags        string    `db:"flags"`
 	SizeBytes    int64     `db:"size_bytes"`
-	RawKey       string    `db:"raw_key"`        // Redis key or fallback storage path
+	RawKey       string    `db:"raw_key"` // Redis key or fallback storage path
 	EnvelopeFrom string    `db:"envelope_from"`
 	EnvelopeTo   string    `db:"envelope_to"`
 	Subject      string    `db:"subject"`

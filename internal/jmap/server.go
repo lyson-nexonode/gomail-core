@@ -77,7 +77,7 @@ func (s *Server) Start(ctx context.Context) error {
 		s.log.Info("jmap server shutting down")
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		srv.Shutdown(shutdownCtx)
+		_ = srv.Shutdown(shutdownCtx)
 	}()
 
 	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
@@ -111,13 +111,13 @@ func (s *Server) handleSession(w http.ResponseWriter, r *http.Request) {
 	session := SessionResponse{
 		Capabilities: map[string]interface{}{
 			CapabilityCore: map[string]interface{}{
-				"maxSizeUpload":      50 * 1024 * 1024,
-				"maxConcurrentUpload": 4,
-				"maxSizeRequest":     10 * 1024 * 1024,
+				"maxSizeUpload":         50 * 1024 * 1024,
+				"maxConcurrentUpload":   4,
+				"maxSizeRequest":        10 * 1024 * 1024,
 				"maxConcurrentRequests": 4,
-				"maxCallsInRequest":  16,
-				"maxObjectsInGet":    500,
-				"maxObjectsInSet":    500,
+				"maxCallsInRequest":     16,
+				"maxObjectsInGet":       500,
+				"maxObjectsInSet":       500,
 			},
 			CapabilityMail: map[string]interface{}{},
 		},

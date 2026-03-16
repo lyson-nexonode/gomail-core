@@ -129,7 +129,7 @@ func NewSession(
 
 // Handle runs the session read loop until the client disconnects or sends LOGOUT.
 func (s *Session) Handle() {
-	defer s.conn.Close()
+	defer func() { _ = s.conn.Close() }()
 
 	s.log.Info("imap session started", zap.String("session", s.id))
 
@@ -137,7 +137,7 @@ func (s *Session) Handle() {
 	s.writeUntagged("OK", fmt.Sprintf("%s IMAP4rev1 gomail-core ready", s.cfg.SMTP.Domain))
 
 	for {
-		s.conn.SetReadDeadline(time.Now().Add(30 * time.Minute))
+		_ = s.conn.SetReadDeadline(time.Now().Add(30 * time.Minute))
 
 		line, err := s.reader.ReadString('\n')
 		if err != nil {
@@ -250,20 +250,20 @@ func (s *Session) transition(event IMAPEvent) bool {
 // writeTagged sends a tagged response: "A001 OK message\r\n"
 func (s *Session) writeTagged(tag, status, message string) {
 	line := fmt.Sprintf("%s %s %s", tag, status, message)
-	fmt.Fprintf(s.conn, "%s\r\n", line)
+	_, _ = fmt.Fprintf(s.conn, "%s", line)
 	s.log.Debug("imap sent", zap.String("session", s.id), zap.String("line", line))
 }
 
 // writeUntagged sends an untagged response: "* OK message\r\n"
 func (s *Session) writeUntagged(status, message string) {
 	line := fmt.Sprintf("* %s %s", status, message)
-	fmt.Fprintf(s.conn, "%s\r\n", line)
+	_, _ = fmt.Fprintf(s.conn, "%s", line)
 	s.log.Debug("imap sent", zap.String("session", s.id), zap.String("line", line))
 }
 
 // writeLine sends a raw line with CRLF.
 func (s *Session) writeLine(line string) {
-	fmt.Fprintf(s.conn, "%s\r\n", line)
+	_, _ = fmt.Fprintf(s.conn, "%s", line)
 	s.log.Debug("imap sent", zap.String("session", s.id), zap.String("line", line))
 }
 

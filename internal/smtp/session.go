@@ -115,13 +115,13 @@ func newSMTPFSM() *llfsm.FSM {
 
 // Handle runs the session read loop until the client disconnects or sends QUIT.
 func (s *Session) Handle() {
-	defer s.conn.Close()
+	defer func() { _ = s.conn.Close() }()
 
 	s.log.Info("smtp session started", zap.String("session", s.id))
 	s.write(fmt.Sprintf("220 %s ESMTP gomail-core ready", s.cfg.SMTP.Domain))
 
 	for {
-		s.conn.SetReadDeadline(time.Now().Add(5 * time.Minute))
+		_ = s.conn.SetReadDeadline(time.Now().Add(5 * time.Minute))
 
 		line, err := s.reader.ReadString('\n')
 		if err != nil {
@@ -190,7 +190,7 @@ func (s *Session) transitionRcptTo() bool {
 
 // write sends a response line to the client with CRLF as required by RFC 5321.
 func (s *Session) write(line string) {
-	fmt.Fprintf(s.conn, "%s\r\n", line)
+	_, _ = fmt.Fprintf(s.conn, "%s\r\n", line)
 	s.log.Debug("smtp sent", zap.String("session", s.id), zap.String("line", line))
 }
 
