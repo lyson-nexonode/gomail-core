@@ -108,7 +108,7 @@ func (s *Session) handleSelect(tag, args string, readOnly bool) {
 		return
 	}
 
-	if !s.transition(EventSelect) {
+	if !s.transitionSelect() {
 		s.writeTagged(tag, "NO", "Cannot select mailbox")
 		return
 	}

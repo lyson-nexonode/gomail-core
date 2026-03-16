@@ -266,3 +266,14 @@ func (s *Session) writeLine(line string) {
 	fmt.Fprintf(s.conn, "%s\r\n", line)
 	s.log.Debug("imap sent", zap.String("session", s.id), zap.String("line", line))
 }
+
+// transitionSelect handles SELECT and EXAMINE.
+// Re-selecting a mailbox while already in selected state is valid (RFC 3501).
+// looplab/fsm does not support self-transitions so we handle this explicitly.
+func (s *Session) transitionSelect() bool {
+	if s.fsm.Current() == string(StateSelected) {
+		// Already selected — switching mailbox is valid without FSM transition
+		return true
+	}
+	return s.transition(EventSelect)
+}

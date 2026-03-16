@@ -64,7 +64,7 @@ func (s *Session) handleRCPT(args string) {
 		return
 	}
 
-	if !s.transition(EventRcptTo) {
+	if !s.transitionRcptTo() {
 		return
 	}
 
@@ -166,6 +166,8 @@ func (s *Session) handleQUIT() {
 }
 
 // extractAddress parses an address from MAIL FROM or RCPT TO arguments.
+// Returns the address without angle brackets and true on success.
+// Rejects empty addresses like FROM:<>.
 func extractAddress(args, prefix string) (string, bool) {
 	upper := strings.ToUpper(args)
 	if !strings.HasPrefix(upper, prefix) {
@@ -176,7 +178,12 @@ func extractAddress(args, prefix string) (string, bool) {
 	rest = strings.TrimSpace(rest)
 
 	if strings.HasPrefix(rest, "<") && strings.HasSuffix(rest, ">") {
-		return rest[1 : len(rest)-1], true
+		inner := rest[1 : len(rest)-1]
+		// Reject empty address FROM:<>
+		if inner == "" {
+			return "", false
+		}
+		return inner, true
 	}
 
 	if rest != "" {

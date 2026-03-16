@@ -20,26 +20,15 @@ import (
 type State string
 
 const (
-	// StateInit is the initial state when a client connects.
-	StateInit State = "init"
-
-	// StateGreeted is entered after a valid EHLO or HELO command.
-	StateGreeted State = "greeted"
-
-	// StateMailFrom is entered after a valid MAIL FROM command.
+	StateInit     State = "init"
+	StateGreeted  State = "greeted"
 	StateMailFrom State = "mail_from"
-
-	// StateRcptTo is entered after at least one valid RCPT TO command.
-	StateRcptTo State = "rcpt_to"
-
-	// StateData is entered after the DATA command is accepted.
-	StateData State = "data"
-
-	// StateQuit is the terminal state after a QUIT command.
-	StateQuit State = "quit"
+	StateRcptTo   State = "rcpt_to"
+	StateData     State = "data"
+	StateQuit     State = "quit"
 )
 
-// SMTPEvent represents a transition trigger in the SMTP FSM.
+// SMTPEvent represents a FSM transition trigger.
 type SMTPEvent string
 
 const (
@@ -66,7 +55,6 @@ type Session struct {
 }
 
 // NewSession creates a new SMTP session for the given connection.
-// delivery is the port through which received messages are handed off.
 func NewSession(conn net.Conn, cfg *config.Config, log *zap.Logger, delivery ports.DeliveryPipeline) *Session {
 	s := &Session{
 		conn:     conn,
@@ -78,7 +66,14 @@ func NewSession(conn net.Conn, cfg *config.Config, log *zap.Logger, delivery por
 		delivery: delivery,
 	}
 
-	s.fsm = llfsm.NewFSM(
+	s.fsm = newSMTPFSM()
+	return s
+}
+
+// newSMTPFSM builds the SMTP session FSM.
+// Extracted as a standalone function so it can be reused in tests.
+func newSMTPFSM() *llfsm.FSM {
+	return llfsm.NewFSM(
 		string(StateInit),
 		llfsm.Events{
 			// EHLO/HELO can be sent from init or greeted (client re-identification)
@@ -87,8 +82,9 @@ func NewSession(conn net.Conn, cfg *config.Config, log *zap.Logger, delivery por
 			// MAIL FROM is only valid after greeting
 			{Name: string(EventMailFrom), Src: []string{string(StateGreeted)}, Dst: string(StateMailFrom)},
 
-			// RCPT TO is valid after MAIL FROM or after another RCPT TO (multiple recipients)
-			{Name: string(EventRcptTo), Src: []string{string(StateMailFrom), string(StateRcptTo)}, Dst: string(StateRcptTo)},
+			// RCPT TO transitions from mail_from to rcpt_to only
+			// Additional RCPT TO commands do not trigger FSM events — see handleRCPT
+			{Name: string(EventRcptTo), Src: []string{string(StateMailFrom)}, Dst: string(StateRcptTo)},
 
 			// DATA requires at least one recipient
 			{Name: string(EventData), Src: []string{string(StateRcptTo)}, Dst: string(StateData)},
@@ -113,20 +109,8 @@ func NewSession(conn net.Conn, cfg *config.Config, log *zap.Logger, delivery por
 				string(StateData),
 			}, Dst: string(StateQuit)},
 		},
-		llfsm.Callbacks{
-			// Log every state transition for observability
-			"after_event": func(ctx context.Context, e *llfsm.Event) {
-				s.log.Debug("smtp fsm transition",
-					zap.String("session", s.id),
-					zap.String("event", e.Event),
-					zap.String("from", e.Src),
-					zap.String("to", e.Dst),
-				)
-			},
-		},
+		llfsm.Callbacks{},
 	)
-
-	return s
 }
 
 // Handle runs the session read loop until the client disconnects or sends QUIT.
@@ -190,6 +174,18 @@ func (s *Session) transition(event SMTPEvent) bool {
 		return false
 	}
 	return true
+}
+
+// transitionRcptTo handles RCPT TO specifically.
+// The first RCPT TO transitions from mail_from to rcpt_to.
+// Subsequent RCPT TO commands are valid in rcpt_to without a FSM transition
+// since looplab/fsm does not support self-transitions.
+func (s *Session) transitionRcptTo() bool {
+	if s.currentState() == StateRcptTo {
+		// Already in rcpt_to — additional recipients are valid, no FSM event needed
+		return true
+	}
+	return s.transition(EventRcptTo)
 }
 
 // write sends a response line to the client with CRLF as required by RFC 5321.
