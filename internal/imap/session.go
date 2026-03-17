@@ -38,13 +38,13 @@ const (
 // Session represents a single IMAP client connection.
 // It depends only on ports interfaces — never on concrete storage.
 type Session struct {
-	conn    net.Conn
-	reader  *bufio.Reader
-	writer  *bufio.Writer
-	fsm     *llfsm.FSM
-	cfg     *config.Config
-	log     *zap.Logger
-	id      string
+	conn   net.Conn
+	reader *bufio.Reader
+	writer *bufio.Writer
+	fsm    *llfsm.FSM
+	cfg    *config.Config
+	log    *zap.Logger
+	id     string
 
 	// readTimeout is the idle timeout per read. Zero means no deadline.
 	// Use a non-zero value in production, zero in tests.

@@ -50,40 +50,8 @@ func newTestSession(t *testing.T, delivery ports.DeliveryPipeline) (*Session, ne
 }
 
 // sendRecv sends a command and reads the response from the client side.
-func sendRecv(t *testing.T, client net.Conn, cmd string) string {
-	t.Helper()
-	_ = client.SetDeadline(time.Now().Add(2 * time.Second))
-	_, err := fmt.Fprintf(client, "%s\r\n", cmd)
-	require.NoError(t, err)
-	reader := bufio.NewReader(client)
-	line, err := reader.ReadString('\n')
-	require.NoError(t, err)
-	return strings.TrimRight(line, "\r\n")
-}
 
 // readLines reads multiple response lines until a final response line.
-func readLines(t *testing.T, client net.Conn) []string {
-	t.Helper()
-	_ = client.SetDeadline(time.Now().Add(2 * time.Second))
-	var lines []string
-	reader := bufio.NewReader(client)
-	for {
-		line, err := reader.ReadString('\n')
-		if err != nil {
-			break
-		}
-		line = strings.TrimRight(line, "\r\n")
-		lines = append(lines, line)
-		// A line without a dash after the code is the final response
-		if len(line) >= 4 && line[3] == ' ' {
-			break
-		}
-		if len(line) < 4 {
-			break
-		}
-	}
-	return lines
-}
 
 // TestSMTPSessionGreeting verifies that the server sends a 220 greeting on connect.
 func TestSMTPSessionGreeting(t *testing.T) {
@@ -91,7 +59,7 @@ func TestSMTPSessionGreeting(t *testing.T) {
 	session, client := newTestSession(t, delivery)
 
 	go session.Handle()
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 
 	_ = client.SetDeadline(time.Now().Add(2 * time.Second))
 	reader := bufio.NewReader(client)
@@ -106,7 +74,7 @@ func TestSMTPSessionEHLO(t *testing.T) {
 	session, client := newTestSession(t, delivery)
 
 	go session.Handle()
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 
 	// Read greeting
 	_ = client.SetDeadline(time.Now().Add(2 * time.Second))
@@ -140,7 +108,7 @@ func TestSMTPSessionQUIT(t *testing.T) {
 	session, client := newTestSession(t, delivery)
 
 	go session.Handle()
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 
 	_ = client.SetDeadline(time.Now().Add(2 * time.Second))
 	reader := bufio.NewReader(client)
@@ -161,7 +129,7 @@ func TestSMTPSessionInvalidCommand(t *testing.T) {
 	session, client := newTestSession(t, delivery)
 
 	go session.Handle()
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 
 	_ = client.SetDeadline(time.Now().Add(2 * time.Second))
 	reader := bufio.NewReader(client)
@@ -182,7 +150,7 @@ func TestSMTPSessionFullTransaction(t *testing.T) {
 	session, client := newTestSession(t, delivery)
 
 	go session.Handle()
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 
 	_ = client.SetDeadline(time.Now().Add(5 * time.Second))
 	reader := bufio.NewReader(client)
@@ -245,7 +213,7 @@ func TestSMTPSessionRSET(t *testing.T) {
 	session, client := newTestSession(t, delivery)
 
 	go session.Handle()
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 
 	_ = client.SetDeadline(time.Now().Add(2 * time.Second))
 	reader := bufio.NewReader(client)
@@ -286,7 +254,7 @@ func TestSMTPSessionNOOP(t *testing.T) {
 	session, client := newTestSession(t, delivery)
 
 	go session.Handle()
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 
 	_ = client.SetDeadline(time.Now().Add(2 * time.Second))
 	reader := bufio.NewReader(client)

@@ -126,7 +126,7 @@ func newIMAPTestClient(t *testing.T, mb *mockMailboxReader, msg *mockMessageRead
 	ready := make(chan struct{})
 
 	go func() {
-		defer ln.Close()
+		defer func() { _ = ln.Close() }()
 		conn, err := ln.Accept()
 		if err != nil {
 			close(ready)
@@ -140,7 +140,7 @@ func newIMAPTestClient(t *testing.T, mb *mockMailboxReader, msg *mockMessageRead
 	// Dial before waiting for ready — TCP handshake queues the connection
 	clientConn, err := net.DialTimeout("tcp", ln.Addr().String(), 2*time.Second)
 	require.NoError(t, err)
-	t.Cleanup(func() { clientConn.Close() })
+	t.Cleanup(func() { _ = clientConn.Close() })
 
 	// Wait for Accept() to have processed the connection
 	select {

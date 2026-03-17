@@ -11,19 +11,19 @@ import (
 // when set, and the fallback when not set.
 func TestGetEnv(t *testing.T) {
 	t.Run("returns env variable when set", func(t *testing.T) {
-		os.Setenv("TEST_KEY", "testvalue")
-		defer os.Unsetenv("TEST_KEY")
+		_ = os.Setenv("TEST_KEY", "testvalue")
+		defer func() { _ = os.Unsetenv("TEST_KEY") }()
 		assert.Equal(t, "testvalue", getEnv("TEST_KEY", "fallback"))
 	})
 
 	t.Run("returns fallback when not set", func(t *testing.T) {
-		os.Unsetenv("TEST_KEY")
+		_ = os.Unsetenv("TEST_KEY")
 		assert.Equal(t, "fallback", getEnv("TEST_KEY", "fallback"))
 	})
 
 	t.Run("returns fallback when empty", func(t *testing.T) {
-		os.Setenv("TEST_KEY", "")
-		defer os.Unsetenv("TEST_KEY")
+		_ = os.Setenv("TEST_KEY", "")
+		defer func() { _ = os.Unsetenv("TEST_KEY") }()
 		assert.Equal(t, "fallback", getEnv("TEST_KEY", "fallback"))
 	})
 }
@@ -31,19 +31,19 @@ func TestGetEnv(t *testing.T) {
 // TestGetEnvInt verifies integer parsing from environment variables.
 func TestGetEnvInt(t *testing.T) {
 	t.Run("returns int value when set", func(t *testing.T) {
-		os.Setenv("TEST_INT", "42")
-		defer os.Unsetenv("TEST_INT")
+		_ = os.Setenv("TEST_INT", "42")
+		defer func() { _ = os.Unsetenv("TEST_INT") }()
 		assert.Equal(t, 42, getEnvInt("TEST_INT", 0))
 	})
 
 	t.Run("returns fallback when not set", func(t *testing.T) {
-		os.Unsetenv("TEST_INT")
+		_ = os.Unsetenv("TEST_INT")
 		assert.Equal(t, 10, getEnvInt("TEST_INT", 10))
 	})
 
 	t.Run("returns fallback when invalid", func(t *testing.T) {
-		os.Setenv("TEST_INT", "notanint")
-		defer os.Unsetenv("TEST_INT")
+		_ = os.Setenv("TEST_INT", "notanint")
+		defer func() { _ = os.Unsetenv("TEST_INT") }()
 		assert.Equal(t, 5, getEnvInt("TEST_INT", 5))
 	})
 }
@@ -64,11 +64,11 @@ func TestLoad(t *testing.T) {
 
 // TestLoadWithEnv verifies that Load picks up environment variables.
 func TestLoadWithEnv(t *testing.T) {
-	os.Setenv("GOMAIL_ENV", "production")
-	os.Setenv("GOMAIL_SMTP_DOMAIN", "test.local")
+	_ = os.Setenv("GOMAIL_ENV", "production")
+	_ = os.Setenv("GOMAIL_SMTP_DOMAIN", "test.local")
 	defer func() {
-		os.Unsetenv("GOMAIL_ENV")
-		os.Unsetenv("GOMAIL_SMTP_DOMAIN")
+		_ = os.Unsetenv("GOMAIL_ENV")
+		_ = os.Unsetenv("GOMAIL_SMTP_DOMAIN")
 	}()
 
 	cfg := Load()
