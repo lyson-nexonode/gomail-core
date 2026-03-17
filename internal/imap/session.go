@@ -19,20 +19,10 @@ import (
 type State string
 
 const (
-	// StateNotAuthenticated is the initial state after connection.
-	// Only LOGIN, CAPABILITY and LOGOUT are allowed.
 	StateNotAuthenticated State = "not_authenticated"
-
-	// StateAuthenticated is entered after successful LOGIN.
-	// The client can list and select mailboxes.
-	StateAuthenticated State = "authenticated"
-
-	// StateSelected is entered after SELECT or EXAMINE.
-	// The client can fetch, store, search and expunge messages.
-	StateSelected State = "selected"
-
-	// StateLogout is the terminal state after LOGOUT.
-	StateLogout State = "logout"
+	StateAuthenticated    State = "authenticated"
+	StateSelected         State = "selected"
+	StateLogout           State = "logout"
 )
 
 // IMAPEvent represents a FSM transition trigger.
@@ -48,29 +38,29 @@ const (
 // Session represents a single IMAP client connection.
 // It depends only on ports interfaces — never on concrete storage.
 type Session struct {
-	conn   net.Conn
-	reader *bufio.Reader
-	writer *bufio.Writer
-	fsm    *llfsm.FSM
-	cfg    *config.Config
-	log    *zap.Logger
-	id     string
+	conn    net.Conn
+	reader  *bufio.Reader
+	writer  *bufio.Writer
+	fsm     *llfsm.FSM
+	cfg     *config.Config
+	log     *zap.Logger
+	id      string
 
-	// authenticated user — set after successful LOGIN
+	// readTimeout is the idle timeout per read. Zero means no deadline.
+	// Use a non-zero value in production, zero in tests.
+	readTimeout time.Duration
+
 	userID   uint64
 	username string
-
-	// currently selected mailbox — set after SELECT or EXAMINE
 	selected *SelectedMailbox
 
-	// storage ports
 	mailboxReader  ports.MailboxReader
 	messageReader  ports.MessageReader
 	domainResolver ports.DomainResolver
 	userAuth       ports.UserAuthenticator
 }
 
-// NewSession creates a new IMAP session for the given connection.
+// NewSession creates a new IMAP session with a 30-minute read timeout.
 func NewSession(
 	conn net.Conn,
 	cfg *config.Config,
@@ -80,6 +70,21 @@ func NewSession(
 	domainResolver ports.DomainResolver,
 	userAuth ports.UserAuthenticator,
 ) *Session {
+	return newSession(conn, cfg, log, mailboxReader, messageReader, domainResolver, userAuth, 30*time.Minute)
+}
+
+// newSession creates a session with a configurable read timeout.
+// Use readTimeout=0 in tests to disable per-read deadlines.
+func newSession(
+	conn net.Conn,
+	cfg *config.Config,
+	log *zap.Logger,
+	mailboxReader ports.MailboxReader,
+	messageReader ports.MessageReader,
+	domainResolver ports.DomainResolver,
+	userAuth ports.UserAuthenticator,
+	readTimeout time.Duration,
+) *Session {
 	s := &Session{
 		conn:           conn,
 		reader:         bufio.NewReader(conn),
@@ -87,6 +92,7 @@ func NewSession(
 		cfg:            cfg,
 		log:            log.With(zap.String("remote", conn.RemoteAddr().String())),
 		id:             fmt.Sprintf("%d", time.Now().UnixNano()),
+		readTimeout:    readTimeout,
 		mailboxReader:  mailboxReader,
 		messageReader:  messageReader,
 		domainResolver: domainResolver,
@@ -96,16 +102,9 @@ func NewSession(
 	s.fsm = llfsm.NewFSM(
 		string(StateNotAuthenticated),
 		llfsm.Events{
-			// LOGIN transitions from not_authenticated to authenticated
 			{Name: string(EventLogin), Src: []string{string(StateNotAuthenticated)}, Dst: string(StateAuthenticated)},
-
-			// SELECT and EXAMINE transition from authenticated to selected
-			{Name: string(EventSelect), Src: []string{string(StateAuthenticated), string(StateSelected)}, Dst: string(StateSelected)},
-
-			// CLOSE goes back to authenticated without expunging
+			{Name: string(EventSelect), Src: []string{string(StateAuthenticated)}, Dst: string(StateSelected)},
 			{Name: string(EventClose), Src: []string{string(StateSelected)}, Dst: string(StateAuthenticated)},
-
-			// LOGOUT is valid from any state
 			{Name: string(EventLogout), Src: []string{
 				string(StateNotAuthenticated),
 				string(StateAuthenticated),
@@ -132,12 +131,13 @@ func (s *Session) Handle() {
 	defer func() { _ = s.conn.Close() }()
 
 	s.log.Info("imap session started", zap.String("session", s.id))
-
-	// Send server greeting as required by RFC 3501 section 7.1.5
 	s.writeUntagged("OK", fmt.Sprintf("%s IMAP4rev1 gomail-core ready", s.cfg.SMTP.Domain))
 
 	for {
-		_ = s.conn.SetReadDeadline(time.Now().Add(30 * time.Minute))
+		// Only set a read deadline if configured (production mode)
+		if s.readTimeout > 0 {
+			_ = s.conn.SetReadDeadline(time.Now().Add(s.readTimeout))
+		}
 
 		line, err := s.reader.ReadString('\n')
 		if err != nil {
@@ -152,10 +152,9 @@ func (s *Session) Handle() {
 
 		s.log.Debug("imap received", zap.String("session", s.id), zap.String("line", line))
 
-		// IMAP commands are prefixed with a client tag: "A001 LOGIN user pass"
 		tag, rest, ok := strings.Cut(line, " ")
 		if !ok {
-			s.writeTagged(line, "BAD", "Invalid command")
+			_, _ = fmt.Fprintf(s.conn, "%s BAD Invalid command\r\n", line)
 			continue
 		}
 
@@ -168,6 +167,48 @@ func (s *Session) Handle() {
 			return
 		}
 	}
+}
+
+// transition fires a FSM event and returns false if invalid.
+func (s *Session) transition(event IMAPEvent) bool {
+	if err := s.fsm.Event(context.Background(), string(event)); err != nil {
+		s.log.Warn("imap invalid transition",
+			zap.String("session", s.id),
+			zap.String("event", string(event)),
+			zap.String("current_state", s.fsm.Current()),
+		)
+		return false
+	}
+	return true
+}
+
+// transitionSelect handles SELECT and EXAMINE.
+// Re-selecting a mailbox while already in selected state is valid (RFC 3501).
+func (s *Session) transitionSelect() bool {
+	if s.fsm.Current() == string(StateSelected) {
+		return true
+	}
+	return s.transition(EventSelect)
+}
+
+// writeTagged sends a tagged response.
+func (s *Session) writeTagged(tag, status, message string) {
+	line := fmt.Sprintf("%s %s %s", tag, status, message)
+	_, _ = fmt.Fprintf(s.conn, "%s\r\n", line)
+	s.log.Debug("imap sent", zap.String("session", s.id), zap.String("line", line))
+}
+
+// writeUntagged sends an untagged response.
+func (s *Session) writeUntagged(status, message string) {
+	line := fmt.Sprintf("* %s %s", status, message)
+	_, _ = fmt.Fprintf(s.conn, "%s\r\n", line)
+	s.log.Debug("imap sent", zap.String("session", s.id), zap.String("line", line))
+}
+
+// writeLine sends a raw line with CRLF.
+func (s *Session) writeLine(line string) {
+	_, _ = fmt.Fprintf(s.conn, "%s\r\n", line)
+	s.log.Debug("imap sent", zap.String("session", s.id), zap.String("line", line))
 }
 
 // dispatch routes a command to the appropriate handler based on the current FSM state.
@@ -195,9 +236,11 @@ func (s *Session) dispatch(tag, cmd, args string) {
 		case "LIST":
 			s.handleList(tag, args)
 		case "LSUB":
-			s.handleList(tag, args) // LSUB uses same logic as LIST for now
+			s.handleList(tag, args)
 		case "CAPABILITY":
 			s.handleCapability(tag)
+		case "NOOP":
+			s.writeTagged(tag, "OK", "NOOP completed")
 		case "LOGOUT":
 			s.handleLogout(tag)
 		default:
@@ -232,48 +275,4 @@ func (s *Session) dispatch(tag, cmd, args string) {
 			s.writeTagged(tag, "BAD", "Unknown command")
 		}
 	}
-}
-
-// transition fires a FSM event and returns false if invalid.
-func (s *Session) transition(event IMAPEvent) bool {
-	if err := s.fsm.Event(context.Background(), string(event)); err != nil {
-		s.log.Warn("imap invalid transition",
-			zap.String("session", s.id),
-			zap.String("event", string(event)),
-			zap.String("current_state", s.fsm.Current()),
-		)
-		return false
-	}
-	return true
-}
-
-// writeTagged sends a tagged response: "A001 OK message\r\n"
-func (s *Session) writeTagged(tag, status, message string) {
-	line := fmt.Sprintf("%s %s %s", tag, status, message)
-	_, _ = fmt.Fprintf(s.conn, "%s", line)
-	s.log.Debug("imap sent", zap.String("session", s.id), zap.String("line", line))
-}
-
-// writeUntagged sends an untagged response: "* OK message\r\n"
-func (s *Session) writeUntagged(status, message string) {
-	line := fmt.Sprintf("* %s %s", status, message)
-	_, _ = fmt.Fprintf(s.conn, "%s", line)
-	s.log.Debug("imap sent", zap.String("session", s.id), zap.String("line", line))
-}
-
-// writeLine sends a raw line with CRLF.
-func (s *Session) writeLine(line string) {
-	_, _ = fmt.Fprintf(s.conn, "%s", line)
-	s.log.Debug("imap sent", zap.String("session", s.id), zap.String("line", line))
-}
-
-// transitionSelect handles SELECT and EXAMINE.
-// Re-selecting a mailbox while already in selected state is valid (RFC 3501).
-// looplab/fsm does not support self-transitions so we handle this explicitly.
-func (s *Session) transitionSelect() bool {
-	if s.fsm.Current() == string(StateSelected) {
-		// Already selected — switching mailbox is valid without FSM transition
-		return true
-	}
-	return s.transition(EventSelect)
 }
