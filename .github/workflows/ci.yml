@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: ["**"]
   pull_request:
     branches: [main]
 
@@ -39,7 +39,7 @@ jobs:
           cache: true
 
       - name: Run tests with race detector
-        run: go test ./... -v -race -coverprofile=coverage.out -covermode=atomic
+        run: CGO_ENABLED=1 go test ./... -v -race -coverprofile=coverage.out -covermode=atomic
 
       - name: Print coverage summary
         run: go tool cover -func=coverage.out | tail -1

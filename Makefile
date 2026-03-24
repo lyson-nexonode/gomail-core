@@ -24,7 +24,7 @@ build: build-smtp build-imap build-jmap
 
 # Run tests with race detector enabled
 test:
-	go test ./... -v -race
+	CGO_ENABLED=1 go test ./... -v -race
 
 test-cover:
 	go test ./... -coverprofile=coverage.out
