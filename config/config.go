@@ -33,10 +33,10 @@ type RedisConfig struct {
 
 // SMTPConfig holds the network and protocol settings for the SMTP server.
 type SMTPConfig struct {
-	Addr        string
-	AddrTLS     string // port 465 — implicit TLS
-	Domain      string
-	MaxSize     int64
+	Addr    string
+	AddrTLS string // port 465 — implicit TLS
+	Domain  string
+	MaxSize int64
 }
 
 // IMAPConfig holds the network settings for the IMAP server.

@@ -49,7 +49,7 @@ type Session struct {
 
 	// readTimeout is the idle timeout per read. Zero means no deadline.
 	// Use a non-zero value in production, zero in tests.
-		readTimeout time.Duration
+	readTimeout time.Duration
 	tlsCfg      *tls.Config
 	isTLS       bool
 
@@ -87,8 +87,8 @@ func newSession(
 	domainResolver ports.DomainResolver,
 	userAuth ports.UserAuthenticator,
 	readTimeout time.Duration,
-	tlsCfg      *tls.Config,
-	isTLS       bool,
+	tlsCfg *tls.Config,
+	isTLS bool,
 ) *Session {
 	s := &Session{
 		conn:           conn,
@@ -226,8 +226,8 @@ func (s *Session) dispatch(tag, cmd, args string) {
 		switch cmd {
 		case "LOGIN":
 			s.handleLogin(tag, args)
-			case "STARTTLS":
-				s.handleSTARTTLS(tag)
+		case "STARTTLS":
+			s.handleSTARTTLS(tag)
 		case "CAPABILITY":
 			s.handleCapability(tag)
 		case "LOGOUT":

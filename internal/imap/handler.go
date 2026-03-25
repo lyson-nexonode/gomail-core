@@ -2,8 +2,8 @@ package imap
 
 import (
 	"bufio"
-	"crypto/tls"
 	"context"
+	"crypto/tls"
 	"fmt"
 	"strings"
 
