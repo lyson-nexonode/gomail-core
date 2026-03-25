@@ -10,6 +10,7 @@ var Capability = []string{
 	"SASL-IR",
 	"LOGIN",
 	"IDLE",
+	"STARTTLS",
 }
 
 // FetchItem represents a data item requested in a FETCH command.

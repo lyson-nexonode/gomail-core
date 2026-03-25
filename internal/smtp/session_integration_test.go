@@ -45,7 +45,7 @@ func newTestSession(t *testing.T, delivery ports.DeliveryPipeline) (*Session, ne
 	}
 
 	log, _ := zap.NewDevelopment()
-	session := NewSession(server, cfg, log, delivery)
+	session := NewSession(server, cfg, log, delivery, nil)
 	return session, client
 }
 

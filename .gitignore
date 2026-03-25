@@ -9,3 +9,6 @@ tmp/
 vendor/
 .idea/
 .vscode/
+certs/*.key
+certs/*.crt
+certs/*.pem

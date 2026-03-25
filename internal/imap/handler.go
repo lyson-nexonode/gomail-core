@@ -1,6 +1,8 @@
 package imap
 
 import (
+	"bufio"
+	"crypto/tls"
 	"context"
 	"fmt"
 	"strings"
@@ -11,7 +13,12 @@ import (
 // handleCapability responds with the list of supported IMAP capabilities.
 // Valid in any state (RFC 3501 section 6.1.1).
 func (s *Session) handleCapability(tag string) {
-	s.writeUntagged("CAPABILITY", strings.Join(Capability, " "))
+	if s.tlsCfg != nil && !s.isTLS {
+		caps := append(Capability, "STARTTLS")
+		s.writeUntagged("CAPABILITY", strings.Join(caps, " "))
+	} else {
+		s.writeUntagged("CAPABILITY", strings.Join(Capability, " "))
+	}
 	s.writeTagged(tag, "OK", "CAPABILITY completed")
 }
 
@@ -313,4 +320,37 @@ func parseAddress(addr string) (string, string, bool) {
 		return "", "", false
 	}
 	return parts[0], parts[1], true
+}
+
+// handleSTARTTLS upgrades the plain IMAP connection to TLS (RFC 2595).
+// After the upgrade the client must re-issue CAPABILITY.
+func (s *Session) handleSTARTTLS(tag string) {
+	if s.isTLS {
+		s.writeTagged(tag, "NO", "Already using TLS")
+		return
+	}
+
+	if s.tlsCfg == nil {
+		s.writeTagged(tag, "NO", "TLS not available")
+		return
+	}
+
+	s.writeTagged(tag, "OK", "Begin TLS negotiation now")
+
+	// Wrap the existing connection in TLS
+	tlsConn := tls.Server(s.conn, s.tlsCfg)
+	if err := tlsConn.Handshake(); err != nil {
+		s.log.Error("imap starttls handshake failed",
+			zap.String("session", s.id),
+			zap.Error(err),
+		)
+		return
+	}
+
+	// Replace connection and reader with TLS-wrapped versions
+	s.conn = tlsConn
+	s.reader = bufio.NewReader(tlsConn)
+	s.isTLS = true
+
+	s.log.Info("imap starttls upgrade successful", zap.String("session", s.id))
 }

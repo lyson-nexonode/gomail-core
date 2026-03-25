@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"os"
 	"os/signal"
 	"syscall"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/lyson-nexonode/gomail-core/config"
 	"github.com/lyson-nexonode/gomail-core/internal/imap"
+	"github.com/lyson-nexonode/gomail-core/internal/security"
 	"github.com/lyson-nexonode/gomail-core/internal/storage"
 	mysqlstore "github.com/lyson-nexonode/gomail-core/internal/storage/mysql"
 	redisstore "github.com/lyson-nexonode/gomail-core/internal/storage/redis"
@@ -30,31 +32,35 @@ func main() {
 		zap.String("addr", cfg.IMAP.Addr),
 	)
 
-	// Initialize MySQL store
 	mysql, err := mysqlstore.New(cfg.MySQL.DSN, log)
 	if err != nil {
 		log.Fatal("mysql init failed", zap.Error(err))
 	}
 	defer func() { _ = mysql.Close() }()
 
-	// Initialize Redis store
 	rdb, err := redisstore.New(cfg.Redis.Addr, cfg.Redis.Password, cfg.Redis.DB, log)
 	if err != nil {
 		log.Fatal("redis init failed", zap.Error(err))
 	}
 	defer func() { _ = rdb.Close() }()
 
-	// Wire the message store — implements all required ports
 	ms := storage.NewMessageStore(mysql, rdb, log)
 
-	// Start pprof on a separate goroutine, never on a public port
+	// Load TLS config — nil disables TLS and implicit TLS listener
+	var tlsCfg *tls.Config
+	if cfg.TLS.Enabled {
+		tlsCfg, err = security.LoadTLSConfig(cfg.TLS.CertFile, cfg.TLS.KeyFile)
+		if err != nil {
+			log.Warn("tls config failed — running without TLS", zap.Error(err))
+		}
+	}
+
 	telemetry.StartPPROF("localhost:6062", log)
 
-	// Graceful shutdown on SIGINT or SIGTERM
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 
-	server := imap.NewServer(cfg, log, ms, ms, ms, ms)
+	server := imap.NewServer(cfg, log, ms, ms, ms, ms, tlsCfg)
 	if err := server.Start(ctx); err != nil {
 		log.Fatal("imap server failed", zap.Error(err))
 	}

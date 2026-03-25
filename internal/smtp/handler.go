@@ -13,6 +13,7 @@ import (
 )
 
 // handleEHLO processes EHLO and HELO commands (RFC 5321 section 4.1.1.1).
+// Advertises STARTTLS capability when TLS is available and not yet active.
 func (s *Session) handleEHLO(args string) {
 	if args == "" {
 		s.write("501 Syntax: EHLO hostname")
@@ -28,6 +29,12 @@ func (s *Session) handleEHLO(args string) {
 	s.write(fmt.Sprintf("250-%s greets %s", s.cfg.SMTP.Domain, args))
 	s.write(fmt.Sprintf("250-SIZE %d", s.cfg.SMTP.MaxSize))
 	s.write("250-8BITMIME")
+
+	// Advertise STARTTLS only when TLS is configured and not yet active
+	if s.tlsCfg != nil && !s.isTLS {
+		s.write("250-STARTTLS")
+	}
+
 	s.write("250 ENHANCEDSTATUSCODES")
 }
 
@@ -77,8 +84,7 @@ func (s *Session) handleRCPT(args string) {
 }
 
 // handleDATA processes the DATA command (RFC 5321 section 4.1.1.4).
-// Once the message body is fully received, it publishes a MessageReceived event
-// to the delivery pipeline — the SMTP session knows nothing about storage.
+// Publishes a MessageReceived event to the delivery pipeline on success.
 func (s *Session) handleDATA() {
 	if !s.transition(EventData) {
 		return
@@ -125,8 +131,6 @@ func (s *Session) handleDATA() {
 	s.envelope.Size = int64(len(s.envelope.Data))
 	s.envelope.ReceivedAt = time.Now()
 
-	// Publish a MessageReceived event to the delivery pipeline.
-	// The SMTP session is decoupled from storage — it only knows the port.
 	event := ports.MessageReceived{
 		From:      s.envelope.From,
 		To:        s.envelope.To,
@@ -166,7 +170,6 @@ func (s *Session) handleQUIT() {
 }
 
 // extractAddress parses an address from MAIL FROM or RCPT TO arguments.
-// Returns the address without angle brackets and true on success.
 // Rejects empty addresses like FROM:<>.
 func extractAddress(args, prefix string) (string, bool) {
 	upper := strings.ToUpper(args)
@@ -179,7 +182,6 @@ func extractAddress(args, prefix string) (string, bool) {
 
 	if strings.HasPrefix(rest, "<") && strings.HasSuffix(rest, ">") {
 		inner := rest[1 : len(rest)-1]
-		// Reject empty address FROM:<>
 		if inner == "" {
 			return "", false
 		}

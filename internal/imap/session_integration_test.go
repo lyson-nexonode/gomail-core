@@ -133,7 +133,7 @@ func newIMAPTestClient(t *testing.T, mb *mockMailboxReader, msg *mockMessageRead
 			return
 		}
 		close(ready)
-		s := newSession(conn, cfg, log, mb, msg, dr, ua, 0)
+		s := newSession(conn, cfg, log, mb, msg, dr, ua, 0, nil, false)
 		s.Handle()
 	}()
 

@@ -15,6 +15,7 @@ type Config struct {
 	SMTP      SMTPConfig
 	IMAP      IMAPConfig
 	JMAP      JMAPConfig
+	TLS       TLSConfig
 	Telemetry TelemetryConfig
 }
 
@@ -32,14 +33,16 @@ type RedisConfig struct {
 
 // SMTPConfig holds the network and protocol settings for the SMTP server.
 type SMTPConfig struct {
-	Addr    string
-	Domain  string
-	MaxSize int64 // maximum accepted message size in bytes
+	Addr        string
+	AddrTLS     string // port 465 — implicit TLS
+	Domain      string
+	MaxSize     int64
 }
 
 // IMAPConfig holds the network settings for the IMAP server.
 type IMAPConfig struct {
-	Addr string
+	Addr    string // port 143 — STARTTLS
+	AddrTLS string // port 993 — implicit TLS
 }
 
 // JMAPConfig holds the network settings for the JMAP server.
@@ -47,9 +50,16 @@ type JMAPConfig struct {
 	Addr string
 }
 
+// TLSConfig holds the paths to the TLS certificate and key files.
+type TLSConfig struct {
+	CertFile string
+	KeyFile  string
+	Enabled  bool
+}
+
 // TelemetryConfig holds the settings for observability endpoints.
 type TelemetryConfig struct {
-	PPROFAddr string // pprof endpoint, must never be exposed publicly
+	PPROFAddr string
 }
 
 // Load reads configuration from environment variables.
@@ -67,14 +77,21 @@ func Load() *Config {
 		},
 		SMTP: SMTPConfig{
 			Addr:    getEnv("GOMAIL_SMTP_ADDR", ":2525"),
+			AddrTLS: getEnv("GOMAIL_SMTP_ADDR_TLS", ":4650"),
 			Domain:  getEnv("GOMAIL_SMTP_DOMAIN", "gomail.local"),
-			MaxSize: int64(getEnvInt("GOMAIL_SMTP_MAX_SIZE", 26214400)), // 25 MB default
+			MaxSize: int64(getEnvInt("GOMAIL_SMTP_MAX_SIZE", 26214400)),
 		},
 		IMAP: IMAPConfig{
-			Addr: getEnv("GOMAIL_IMAP_ADDR", ":1430"),
+			Addr:    getEnv("GOMAIL_IMAP_ADDR", ":1430"),
+			AddrTLS: getEnv("GOMAIL_IMAP_ADDR_TLS", ":9930"),
 		},
 		JMAP: JMAPConfig{
 			Addr: getEnv("GOMAIL_JMAP_ADDR", ":8080"),
+		},
+		TLS: TLSConfig{
+			CertFile: getEnv("GOMAIL_TLS_CERT", "certs/server.crt"),
+			KeyFile:  getEnv("GOMAIL_TLS_KEY", "certs/server.key"),
+			Enabled:  getEnvBool("GOMAIL_TLS_ENABLED", true),
 		},
 		Telemetry: TelemetryConfig{
 			PPROFAddr: getEnv("GOMAIL_PPROF_ADDR", "localhost:6061"),
@@ -91,7 +108,6 @@ func getEnv(key, fallback string) string {
 }
 
 // getEnvInt returns the integer value of an environment variable or a fallback default.
-// Logs a warning and returns the fallback if the value cannot be parsed.
 func getEnvInt(key string, fallback int) int {
 	val := os.Getenv(key)
 	if val == "" {
@@ -103,4 +119,18 @@ func getEnvInt(key string, fallback int) int {
 		return fallback
 	}
 	return n
+}
+
+// getEnvBool returns the boolean value of an environment variable or a fallback default.
+func getEnvBool(key string, fallback bool) bool {
+	val := os.Getenv(key)
+	if val == "" {
+		return fallback
+	}
+	b, err := strconv.ParseBool(val)
+	if err != nil {
+		log.Printf("invalid value for %s: %s, using default %v", key, val, fallback)
+		return fallback
+	}
+	return b
 }

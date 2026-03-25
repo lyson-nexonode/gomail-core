@@ -11,6 +11,7 @@ import (
 	llfsm "github.com/looplab/fsm"
 	"go.uber.org/zap"
 
+	"crypto/tls"
 	"github.com/lyson-nexonode/gomail-core/config"
 	"github.com/lyson-nexonode/gomail-core/internal/ports"
 )
@@ -48,7 +49,9 @@ type Session struct {
 
 	// readTimeout is the idle timeout per read. Zero means no deadline.
 	// Use a non-zero value in production, zero in tests.
-	readTimeout time.Duration
+		readTimeout time.Duration
+	tlsCfg      *tls.Config
+	isTLS       bool
 
 	userID   uint64
 	username string
@@ -70,7 +73,7 @@ func NewSession(
 	domainResolver ports.DomainResolver,
 	userAuth ports.UserAuthenticator,
 ) *Session {
-	return newSession(conn, cfg, log, mailboxReader, messageReader, domainResolver, userAuth, 30*time.Minute)
+	return newSession(conn, cfg, log, mailboxReader, messageReader, domainResolver, userAuth, 30*time.Minute, nil, false)
 }
 
 // newSession creates a session with a configurable read timeout.
@@ -84,6 +87,8 @@ func newSession(
 	domainResolver ports.DomainResolver,
 	userAuth ports.UserAuthenticator,
 	readTimeout time.Duration,
+	tlsCfg      *tls.Config,
+	isTLS       bool,
 ) *Session {
 	s := &Session{
 		conn:           conn,
@@ -93,6 +98,8 @@ func newSession(
 		log:            log.With(zap.String("remote", conn.RemoteAddr().String())),
 		id:             fmt.Sprintf("%d", time.Now().UnixNano()),
 		readTimeout:    readTimeout,
+		tlsCfg:         tlsCfg,
+		isTLS:          isTLS,
 		mailboxReader:  mailboxReader,
 		messageReader:  messageReader,
 		domainResolver: domainResolver,
@@ -219,6 +226,8 @@ func (s *Session) dispatch(tag, cmd, args string) {
 		switch cmd {
 		case "LOGIN":
 			s.handleLogin(tag, args)
+			case "STARTTLS":
+				s.handleSTARTTLS(tag)
 		case "CAPABILITY":
 			s.handleCapability(tag)
 		case "LOGOUT":
@@ -276,3 +285,6 @@ func (s *Session) dispatch(tag, cmd, args string) {
 		}
 	}
 }
+
+// defaultReadTimeout is the idle read timeout for production sessions.
+const defaultReadTimeout = 30 * time.Minute

@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//tmp/**)",
+      "Bash(bash -c 'go build ./... 2>&1 | cat')"
+    ],
+    "additionalDirectories": [
+      "/tmp"
+    ]
+  }
+}

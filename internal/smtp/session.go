@@ -3,6 +3,7 @@ package smtp
 import (
 	"bufio"
 	"context"
+	"crypto/tls"
 	"fmt"
 	"net"
 	"strings"
@@ -52,10 +53,12 @@ type Session struct {
 	log      *zap.Logger
 	id       string
 	delivery ports.DeliveryPipeline
+	tlsCfg   *tls.Config
+	isTLS    bool // true after STARTTLS upgrade or on implicit TLS port
 }
 
 // NewSession creates a new SMTP session for the given connection.
-func NewSession(conn net.Conn, cfg *config.Config, log *zap.Logger, delivery ports.DeliveryPipeline) *Session {
+func NewSession(conn net.Conn, cfg *config.Config, log *zap.Logger, delivery ports.DeliveryPipeline, tlsCfg *tls.Config) *Session {
 	s := &Session{
 		conn:     conn,
 		reader:   bufio.NewReader(conn),
@@ -64,6 +67,12 @@ func NewSession(conn net.Conn, cfg *config.Config, log *zap.Logger, delivery por
 		log:      log.With(zap.String("remote", conn.RemoteAddr().String())),
 		id:       fmt.Sprintf("%d", time.Now().UnixNano()),
 		delivery: delivery,
+		tlsCfg:   tlsCfg,
+	}
+
+	// Detect if the connection is already TLS (implicit TLS port)
+	if _, ok := conn.(*tls.Conn); ok {
+		s.isTLS = true
 	}
 
 	s.fsm = newSMTPFSM()
@@ -71,36 +80,21 @@ func NewSession(conn net.Conn, cfg *config.Config, log *zap.Logger, delivery por
 }
 
 // newSMTPFSM builds the SMTP session FSM.
-// Extracted as a standalone function so it can be reused in tests.
 func newSMTPFSM() *llfsm.FSM {
 	return llfsm.NewFSM(
 		string(StateInit),
 		llfsm.Events{
-			// EHLO/HELO can be sent from init or greeted (client re-identification)
 			{Name: string(EventEHLO), Src: []string{string(StateInit), string(StateGreeted)}, Dst: string(StateGreeted)},
-
-			// MAIL FROM is only valid after greeting
 			{Name: string(EventMailFrom), Src: []string{string(StateGreeted)}, Dst: string(StateMailFrom)},
-
-			// RCPT TO transitions from mail_from to rcpt_to only
-			// Additional RCPT TO commands do not trigger FSM events — see handleRCPT
 			{Name: string(EventRcptTo), Src: []string{string(StateMailFrom)}, Dst: string(StateRcptTo)},
-
-			// DATA requires at least one recipient
 			{Name: string(EventData), Src: []string{string(StateRcptTo)}, Dst: string(StateData)},
-
-			// DONE is fired internally when the message body transfer completes
 			{Name: string(EventDone), Src: []string{string(StateData)}, Dst: string(StateGreeted)},
-
-			// RSET resets the transaction but keeps the session alive
 			{Name: string(EventRset), Src: []string{
 				string(StateGreeted),
 				string(StateMailFrom),
 				string(StateRcptTo),
 				string(StateData),
 			}, Dst: string(StateGreeted)},
-
-			// QUIT is valid from any state
 			{Name: string(EventQuit), Src: []string{
 				string(StateInit),
 				string(StateGreeted),
@@ -117,7 +111,7 @@ func newSMTPFSM() *llfsm.FSM {
 func (s *Session) Handle() {
 	defer func() { _ = s.conn.Close() }()
 
-	s.log.Info("smtp session started", zap.String("session", s.id))
+	s.log.Info("smtp session started", zap.String("session", s.id), zap.Bool("tls", s.isTLS))
 	s.write(fmt.Sprintf("220 %s ESMTP gomail-core ready", s.cfg.SMTP.Domain))
 
 	for {
@@ -142,6 +136,8 @@ func (s *Session) Handle() {
 		switch cmd {
 		case "EHLO", "HELO":
 			s.handleEHLO(args)
+		case "STARTTLS":
+			s.handleSTARTTLS()
 		case "MAIL":
 			s.handleMAIL(args)
 		case "RCPT":
@@ -154,12 +150,54 @@ func (s *Session) Handle() {
 			s.handleQUIT()
 			return
 		case "NOOP":
-			// NOOP does nothing but must be acknowledged (RFC 5321 section 4.1.1.9)
 			s.write("250 OK")
 		default:
 			s.write("500 Command not recognized")
 		}
 	}
+}
+
+// handleSTARTTLS upgrades the plain connection to TLS (RFC 3207).
+// After the upgrade, the session reader is reset to read from the TLS connection.
+func (s *Session) handleSTARTTLS() {
+	if s.isTLS {
+		s.write("503 Already using TLS")
+		return
+	}
+
+	if s.tlsCfg == nil {
+		s.write("454 TLS not available")
+		return
+	}
+
+	// Reject STARTTLS after MAIL FROM — the transaction must be restarted
+	if s.currentState() == StateMailFrom || s.currentState() == StateRcptTo {
+		s.write("503 Bad sequence of commands")
+		return
+	}
+
+	s.write("220 Ready to start TLS")
+
+	// Wrap the existing connection in TLS
+	tlsConn := tls.Server(s.conn, s.tlsCfg)
+	if err := tlsConn.Handshake(); err != nil {
+		s.log.Error("smtp starttls handshake failed",
+			zap.String("session", s.id),
+			zap.Error(err),
+		)
+		return
+	}
+
+	// Replace connection and reader with the TLS-wrapped versions
+	s.conn = tlsConn
+	s.reader = bufio.NewReader(tlsConn)
+	s.isTLS = true
+
+	// Reset the FSM — client must re-issue EHLO after STARTTLS (RFC 3207 section 4.2)
+	s.fsm = newSMTPFSM()
+	s.envelope.Reset()
+
+	s.log.Info("smtp starttls upgrade successful", zap.String("session", s.id))
 }
 
 // transition fires a FSM event and writes 503 if the transition is invalid.
@@ -177,12 +215,9 @@ func (s *Session) transition(event SMTPEvent) bool {
 }
 
 // transitionRcptTo handles RCPT TO specifically.
-// The first RCPT TO transitions from mail_from to rcpt_to.
-// Subsequent RCPT TO commands are valid in rcpt_to without a FSM transition
-// since looplab/fsm does not support self-transitions.
+// Additional RCPT TO commands are valid without a FSM transition.
 func (s *Session) transitionRcptTo() bool {
 	if s.currentState() == StateRcptTo {
-		// Already in rcpt_to — additional recipients are valid, no FSM event needed
 		return true
 	}
 	return s.transition(EventRcptTo)
