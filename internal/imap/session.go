@@ -3,6 +3,7 @@ package imap
 import (
 	"bufio"
 	"context"
+	"crypto/tls"
 	"fmt"
 	"net"
 	"strings"
@@ -11,7 +12,6 @@ import (
 	llfsm "github.com/looplab/fsm"
 	"go.uber.org/zap"
 
-	"crypto/tls"
 	"github.com/lyson-nexonode/gomail-core/config"
 	"github.com/lyson-nexonode/gomail-core/internal/ports"
 )
