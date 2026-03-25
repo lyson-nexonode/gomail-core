@@ -7,7 +7,7 @@
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Go Report Card](https://goreportcard.com/badge/github.com/lyson-nexonode/gomail-core)](https://goreportcard.com/report/github.com/lyson-nexonode/gomail-core)
 
-Built as a technical demonstration of a production-grade mail server from scratch in Go, implementing SMTP (RFC 5321), IMAP4rev1 (RFC 3501) and JMAP (RFC 8620/8621) with clean architecture and FSM-based session management.
+Built as a technical demonstration of a production-grade mail server from scratch in Go, implementing SMTP (RFC 5321), IMAP4rev1 (RFC 3501) and JMAP (RFC 8620/8621) with clean architecture, FSM-based session management and TLS 1.3.
 
 ---
 
@@ -31,7 +31,7 @@ Built as a technical demonstration of a production-grade mail server from scratc
                     +------------------------------------------+
                     |              gomail-core                  |
                     |                                           |
-  Mail clients ---> |  SMTP :2525   IMAP :1430   JMAP :8080    |
+  Mail clients ---> |  SMTP :2525/:4650   IMAP :1430/:9930   JMAP :8080    |
   JMAP clients ---> |                                           |
                     |          FSM session manager              |
                     |     (looplab/fsm — one FSM per conn)      |
@@ -200,7 +200,7 @@ go test ./internal/jmap/... -v
 | RSET | Implemented | Resets transaction, keeps session alive |
 | NOOP | Implemented | RFC 5321 section 4.1.1.9 |
 | QUIT | Implemented | Graceful session close |
-| STARTTLS | Roadmap | TLS 1.3 planned |
+| STARTTLS | Implemented | TLS 1.3, port 587 (plain+upgrade) and 465 (implicit) |
 | AUTH PLAIN | Roadmap | SASL authentication planned |
 | SIZE extension | Implemented | Advertised in EHLO response |
 
@@ -222,7 +222,7 @@ go test ./internal/jmap/... -v
 | LOGOUT | Implemented | Valid from any state |
 | NOOP | Implemented | |
 | IDLE | Roadmap | Push notifications for new mail |
-| STARTTLS | Roadmap | TLS 1.3 planned |
+| STARTTLS | Implemented | TLS 1.3, port 587 (plain+upgrade) and 465 (implicit) |
 
 ### JMAP — RFC 8620 / RFC 8621
 
@@ -339,7 +339,6 @@ gomail-core/
 ## Roadmap
 
 **Security**
-- TLS 1.3 — STARTTLS on SMTP port 587, IMAPS on port 993
 - DKIM — outbound email signing (RFC 6376)
 - SPF — inbound sender validation (RFC 7208)
 - DMARC — policy enforcement (RFC 7489)
