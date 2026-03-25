@@ -7,7 +7,7 @@
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Go Report Card](https://goreportcard.com/badge/github.com/lyson-nexonode/gomail-core)](https://goreportcard.com/report/github.com/lyson-nexonode/gomail-core)
 
-Built as a technical demonstration of a production-grade mail server from scratch in Go, implementing SMTP (RFC 5321), IMAP4rev1 (RFC 3501) and JMAP (RFC 8620/8621) with clean architecture, FSM-based session management and TLS 1.3.
+Built as a technical demonstration of a production-grade mail server from scratch in Go, implementing SMTP (RFC 5321), IMAP4rev1 (RFC 3501) and JMAP (RFC 8620/8621) with clean architecture, FSM-based session management, and dual-port TLS 1.3 (STARTTLS upgrade + implicit TLS).
 
 ---
 
@@ -106,6 +106,35 @@ go run ./cmd/imap/   # Terminal 2 — port 1430
 go run ./cmd/jmap/   # Terminal 3 — port 8080
 ```
 
+### TLS configuration
+
+TLS is enabled by default. Place your certificate and key in `certs/` or set the environment variables below:
+
+```bash
+export GOMAIL_TLS_CERT=certs/server.crt   # default
+export GOMAIL_TLS_KEY=certs/server.key    # default
+export GOMAIL_TLS_ENABLED=true            # set to false to disable TLS entirely
+```
+
+Generate a self-signed certificate for local development:
+
+```bash
+mkdir -p certs
+openssl req -x509 -newkey rsa:4096 -keyout certs/server.key -out certs/server.crt \
+  -days 365 -nodes -subj "/CN=gomail.local"
+```
+
+Each server then listens on two ports:
+
+| Protocol | Plain (STARTTLS) | Implicit TLS |
+|----------|-----------------|--------------|
+| SMTP     | :2525           | :4650        |
+| IMAP     | :1430           | :9930        |
+
+If `GOMAIL_TLS_ENABLED=false` or the certificate fails to load, the servers fall back to plain TCP only.
+
+---
+
 ### Send a test email via SMTP
 
 ```bash
@@ -200,7 +229,7 @@ go test ./internal/jmap/... -v
 | RSET | Implemented | Resets transaction, keeps session alive |
 | NOOP | Implemented | RFC 5321 section 4.1.1.9 |
 | QUIT | Implemented | Graceful session close |
-| STARTTLS | Implemented | TLS 1.3, port 587 (plain+upgrade) and 465 (implicit) |
+| STARTTLS | Implemented | TLS 1.3 — :2525 plain+upgrade, :4650 implicit TLS |
 | AUTH PLAIN | Roadmap | SASL authentication planned |
 | SIZE extension | Implemented | Advertised in EHLO response |
 
@@ -222,7 +251,7 @@ go test ./internal/jmap/... -v
 | LOGOUT | Implemented | Valid from any state |
 | NOOP | Implemented | |
 | IDLE | Roadmap | Push notifications for new mail |
-| STARTTLS | Implemented | TLS 1.3, port 587 (plain+upgrade) and 465 (implicit) |
+| STARTTLS | Implemented | TLS 1.3 — :1430 plain+upgrade, :9930 implicit TLS |
 
 ### JMAP — RFC 8620 / RFC 8621
 
@@ -301,6 +330,8 @@ gomail-core/
 │   │   ├── session.go      # FSM definition and session lifecycle
 │   │   ├── handler.go      # SMTP command handlers
 │   │   └── envelope.go     # Mail envelope (from, to, body)
+│   ├── security/
+│   │   └── tls.go          # LoadTLSConfig — TLS 1.2/1.3, strong cipher suites
 │   ├── imap/
 │   │   ├── server.go       # TCP listener, goroutine per connection
 │   │   ├── session.go      # FSM definition and session lifecycle
@@ -365,7 +396,7 @@ gomail-core/
 
 **Deployment**
 - Kubernetes Helm chart
-- Let's Encrypt — automatic TLS certificate provisioning
+- Let's Encrypt — automatic TLS certificate provisioning (manual certs already supported)
 - GitLab CI pipeline — lint, test, build, docker push
 
 ---

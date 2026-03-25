@@ -5,7 +5,8 @@
       "Bash(bash -c 'go build ./... 2>&1 | cat')",
       "Bash(bash -c 'golangci-lint run ./... --timeout 5m 2>&1 | cat')",
       "Bash(bash -c 'goimports -l ./internal/imap/session.go 2>&1 | cat')",
-      "Bash(bash -c 'go run golang.org/x/tools/cmd/goimports@latest -l ./internal/imap/session.go 2>&1 | cat')"
+      "Bash(bash -c 'go run golang.org/x/tools/cmd/goimports@latest -l ./internal/imap/session.go 2>&1 | cat')",
+      "Bash(bash -c 'git diff main...HEAD --stat 2>&1 | cat')"
     ],
     "additionalDirectories": [
       "/tmp"

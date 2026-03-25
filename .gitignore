@@ -12,3 +12,4 @@ vendor/
 certs/*.key
 certs/*.crt
 certs/*.pem
+.claude/settings.json
