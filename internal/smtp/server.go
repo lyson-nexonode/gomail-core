@@ -15,12 +15,12 @@ import (
 // - plain port (2525 in dev, 587 in prod) with optional STARTTLS upgrade
 // - TLS port (4650 in dev, 465 in prod) with implicit TLS
 type Server struct {
-	cfg       *config.Config
-	log       *zap.Logger
-	listener  net.Listener
+	cfg         *config.Config
+	log         *zap.Logger
+	listener    net.Listener
 	listenerTLS net.Listener
-	delivery  ports.DeliveryPipeline
-	tlsCfg    *tls.Config
+	delivery    ports.DeliveryPipeline
+	tlsCfg      *tls.Config
 }
 
 // NewServer creates a new SMTP server.
